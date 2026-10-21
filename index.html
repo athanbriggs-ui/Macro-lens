@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Munchmark has moved</title>
+<meta name="theme-color" content="#2E7A4D">
+<style>
+  :root{--bg:#F2F4EE;--surface:#FFFFFF;--ink:#16201A;--muted:#5B685F;--line:#D3DBCD;--accent:#2E7A4D;--on-accent:#FFFFFF;--err:#A8322A}
+  @media (prefers-color-scheme: dark){:root{--bg:#0F1311;--surface:#171C19;--ink:#E6ECE7;--muted:#97A39A;--line:#2B342E;--accent:#5DBE84;--on-accent:#0B1A11;--err:#F2B8B5;color-scheme:dark}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:520px;margin:0 auto;padding:28px 16px 56px;display:flex;flex-direction:column;gap:18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;letter-spacing:-.03em}
+  .brand svg{width:34px;height:34px;color:var(--accent)}
+  .brand .check{stroke:var(--on-accent)}
+  .brand span{color:var(--accent)}
+  h1{font-size:26px;line-height:1.2;margin:0;text-wrap:balance}
+  p{margin:0}
+  .muted{color:var(--muted);font-size:15px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .found{font-weight:600}
+  button{font:inherit;font-weight:700;border-radius:12px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);padding:14px 16px;min-height:48px;cursor:pointer;width:100%}
+  button.ghost{background:transparent;color:var(--accent)}
+  button:disabled{opacity:.55;cursor:default}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .msg{font-size:15px;min-height:1em}
+  .msg.err{color:var(--err)}
+  .ok{color:var(--accent);font-weight:700}
+  ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+  a{color:var(--accent);font-weight:700}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand" aria-label="Munchmark">
+    <svg viewBox="0 0 120 120" aria-hidden="true"><defs><mask id="b" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120"><rect width="120" height="120" fill="#fff"/><circle cx="79.5" cy="11.8" r="14" fill="#000"/><circle cx="96.8" cy="23.2" r="14" fill="#000"/><circle cx="108.2" cy="40.5" r="14" fill="#000"/></mask></defs><circle cx="60" cy="60" r="50" fill="currentColor" mask="url(#b)"/><path class="check" d="M34 62 L51 78 L81 46" fill="none" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div aria-hidden="true">munch<span>mark</span></div>
+  </div>
+  <h1>Munchmark has moved to munchmarkai.app</h1>
+  <p class="muted">Your phone saved your log under this old address, so the new one started empty. This page carries everything over. It runs only on your phone; nothing is uploaded anywhere.</p>
+
+  <section class="card" aria-live="polite">
+    <p class="found" id="found">Looking for your saved data…</p>
+    <button type="button" id="move" hidden>Move it to munchmarkai.app</button>
+    <p class="msg" id="move-msg"></p>
+    <button type="button" class="ghost" id="download" hidden>Download a backup file instead</button>
+  </section>
+
+  <section class="card" id="manual" hidden>
+    <p><b>If moving doesn't connect:</b></p>
+    <ol>
+      <li>Tap <b>Download a backup file instead</b> above.</li>
+      <li>Open <a href="https://munchmarkai.app" target="_blank" rel="noopener">munchmarkai.app</a>.</li>
+      <li>Tap the person icon (top right), scroll to <b>Backup &amp; about</b>, tap <b>Restore backup</b> and pick the file.</li>
+    </ol>
+  </section>
+
+  <p class="muted">Do this once on each phone you used. After that you can delete the old Munchmark icon from your home screen and install the app again from munchmarkai.app.</p>
+</main>
+<script>
+(() => {
+  // Where the app lives now. The app only accepts handed-over data from this page's address.
+  const NEW_APP = 'https://munchmarkai.app';
+  const $ = s => document.querySelector(s);
+  let records = null;
+
+  function readIDB(){
+    return new Promise(resolve => {
+      let req;
+      try { req = indexedDB.open('macrolens', 1); } catch { resolve({}); return; }
+      req.onupgradeneeded = () => req.result.createObjectStore('kv');   // the app's own layout, if this phone never had it
+      req.onerror = () => resolve({});
+      req.onsuccess = () => {
+        const db = req.result, out = {};
+        if (!db.objectStoreNames.contains('kv')) { resolve(out); return; }
+        const c = db.transaction('kv').objectStore('kv').openCursor();
+        c.onsuccess = () => { const cur = c.result; if (cur) { out[cur.key] = cur.value; cur.continue(); } else resolve(out); };
+        c.onerror = () => resolve(out);
+      };
+    });
+  }
+  function readLS(){
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('macrolens.') && k !== 'macrolens.model' && !k.startsWith('macrolens.gemini.')) { try { out[k.slice(10)] = JSON.parse(localStorage.getItem(k)); } catch {} }
+      }
+    } catch {}
+    return out;
+  }
+  const hasData = d => !!d && ((d.entries || []).length || (d.water || []).length || (d.checkins || []).length
+    || ['weights', 'practice', 'activity'].some(k => d[k] && Object.values(d[k]).some(v => v !== '' && v != null)));
+
+  function summary(r){
+    const days = Object.keys(r).filter(k => /^day-\d{4}-\d{2}-\d{2}$/.test(k) && hasData(r[k])).sort();
+    const bits = [];
+    if (days.length) bits.push(`${days.length} day${days.length === 1 ? '' : 's'} of logs (${fmt(days[0])} to ${fmt(days[days.length - 1])})`);
+    if (r.profile && Object.keys(r.profile).length) bits.push('your body stats and settings');
+    const n = (k, w) => { const c = (r[k] || []).length; if (c) bits.push(`${c} ${w}${c === 1 ? '' : 's'}`); };
+    n('recipes', 'recipe'); n('pantry', 'pantry item'); n('myfoods', 'saved food'); n('containers', 'container');
+    return bits;
+  }
+  function fmt(k){ const d = new Date(k.slice(4) + 'T12:00:00'); return isNaN(d) ? k.slice(4) : d.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'}); }
+
+  // the same backup file the app's own Export backup makes, without any keys
+  function backupFile(){
+    const r = records, days = {};
+    for (const [k, v] of Object.entries(r)) if (/^day-/.test(k) && v && v.date) days[v.date] = v;
+    const profile = r.profile ? {...r.profile, settings: {...(r.profile.settings || {}), gemKey: undefined, gemInfo: undefined, plusKey: undefined, plusInfo: undefined}} : {};
+    const data = JSON.stringify({app: 'macro-lens', version: 2, exported: new Date().toISOString(), profile, days,
+      pantry: r.pantry || [], recipes: r.recipes || [], containers: r.containers || [], myFoods: r.myfoods || []});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], {type: 'application/json'}));
+    a.download = `munchmark-backup-${new Date().toLocaleDateString('en-CA')}.json`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    const m = $('#move-msg'); m.className = 'msg'; m.textContent = 'Backup saved to your Downloads. Now restore it in the new app (steps below).';
+    $('#manual').hidden = false;
+  }
+
+  function move(){
+    const m = $('#move-msg'); m.className = 'msg';
+    const w = window.open(NEW_APP + '/#move-from-old', '_blank');
+    if (!w) { m.className = 'msg err'; m.textContent = 'Your browser blocked the new tab. Use the backup file instead.'; $('#manual').hidden = false; return; }
+    $('#move').disabled = true; m.textContent = 'Opening munchmarkai.app… tap OK there when it asks.';
+    let sent = false;
+    const timer = setTimeout(() => {
+      if (sent) return;
+      m.className = 'msg err'; m.textContent = 'The new app didn’t connect. That happens if it opened as the installed app. Use the backup file instead.';
+      $('#move').disabled = false; $('#manual').hidden = false;
+    }, 20000);
+    window.addEventListener('message', function on(e){
+      if (e.origin !== NEW_APP || e.source !== w || !e.data) return;
+      if (e.data.type === 'munchmark-ready' && !sent) { sent = true; w.postMessage({type: 'munchmark-move', records}, NEW_APP); }
+      else if (e.data.type === 'munchmark-moved') {
+        clearTimeout(timer); window.removeEventListener('message', on); $('#move').disabled = false;
+        if (e.data.ok) { m.className = 'msg ok'; m.textContent = `Done: ${e.data.days} day${e.data.days === 1 ? '' : 's'} moved. Your log is on munchmarkai.app now.`; }
+        else { m.className = 'msg'; m.textContent = 'Nothing was moved. Tap the button again when you’re ready.'; }
+      }
+    });
+  }
+
+  (async () => {
+    records = {...readLS(), ...(await readIDB())};
+    const bits = summary(records);
+    if (!bits.length) {
+      $('#found').textContent = 'There’s no Munchmark data saved at this address on this phone.';
+      const p = document.createElement('p'); p.className = 'muted';
+      p.innerHTML = 'If you used the app on a different phone, open this page there. Otherwise just go to <a href="https://munchmarkai.app">munchmarkai.app</a>.';
+      $('#found').after(p);
+      return;
+    }
+    $('#found').textContent = `Found ${bits.join(', ')}.`;
+    $('#move').hidden = false; $('#download').hidden = false;
+    $('#move').addEventListener('click', move);
+    $('#download').addEventListener('click', backupFile);
+  })();
+
+  // replace the old app's offline helper so this page always loads fresh (it doesn't touch saved data)
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
